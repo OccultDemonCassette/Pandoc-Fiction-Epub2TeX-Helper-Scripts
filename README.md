@@ -1,273 +1,293 @@
-# pandoc-fiction-setup
+# Pandoc EPUB → Memoir LaTeX “Fiction Pipeline”
 
-A small, opinionated Pandoc “pipeline” for converting **fiction EPUBs** into **Memoir-class LaTeX** that already looks close to a publishable novel layout.
+A small, opinionated Pandoc “pipeline” for converting **fiction EPUBs** into **Memoir-class LaTeX** (XeLaTeX-friendly) that already resembles a “ready-to-typeset novel,” minimizing manual cleanup.
 
-This setup is designed for EPUBs that:
-- contain **in-book “Table of Contents”** pages (navigation lists) you *don’t* want in the body, and/or
-- use **“faux headings”** (styled paragraphs) instead of real HTML headings for Books/Chapters/Sections.
+This bundle is designed around three files:
 
-It produces LaTeX with a consistent memoir-based preamble and tries to infer:
-
-**part → foreword chapter → main chapters → sections (if present)**
+- `novel.yaml` — Pandoc defaults (one-command wiring)
+- `fiction-template.tex` — Memoir-based template (layout, environments, XeLaTeX friendliness)
+- `epub-fiction-fix.lua` — Lua filter (structure inference + cleanup)
 
 ---
 
-## What’s included
+## What this pipeline tries to produce
 
-| File | Purpose |
-|---|---|
-| `novel.yaml` | Pandoc **defaults file** (wires everything together). |
-| `fiction-template.tex` | Pandoc **LaTeX template** (Memoir class + styling + environments). |
-| `epub-fiction-fix.lua` | Pandoc **Lua filter** (structure inference + cleanup). |
+A consistent hierarchy that works across many EPUB families:
 
----
+- **\part** (optional)
+- **frontmatter chapters** (optional: Foreword / Preface / Introduction)
+- **main chapters**
+- **sections inside chapters** (for POV markers, author-byline in anthologies, etc.)
 
-## What it does
+In addition, it tries to:
 
-### Output styling (Template)
-`fiction-template.tex`:
-- Uses the `memoir` class
-- Applies a centered large `\chapterstyle{bigcenter}`
-- Styles `\part` pages as clean “Book title” pages
-- Adds frontmatter: `\frontmatter`, `\maketitle`, `\tableofcontents`, `\mainmatter`
-- Provides helper environments:
-  - `\scenebreak`
-  - `tabletcurse`, `objecttext`, `inscription`, etc.
-
-### Structure inference & cleanup (Lua filter)
-`epub-fiction-fix.lua` tries to:
-- **Remove** in-book EPUB navigation / ToC lists (the linky lists that otherwise become `enumerate` + `\hyperref[...]` blocks).
-- Convert common EPUB patterns into real division headers:
-  - Book/part title pages → `Header(1)` → `\part{...}`
-  - Chapter markers like `1. TITLE`, `CHAPTER IV: TITLE` → `Header(2)` → `\chapter{...}`
-  - Section markers like `1 FLUTIC` → `Header(3)` → `\section{...}`
-- Convert scene breaks like `***`, `* * *`, `⁂` into `\scenebreak`
-- Convert “inscription:” blocks into a `tabletcurse` environment
-- Drop images by default (covers/ornaments). *(You can change this if you want images.)*
+- remove *in-book* EPUB ToC/nav pages (you only use LaTeX `\tableofcontents`)
+- prevent garbage headings such as `\chapter{�}` / ornament-only “chapters”
+- convert scene breaks (`***`, `* * *`, `⁂`, many `<hr/>`) into `\scenebreak`
+- convert “inscription:” blocks into a `tabletcurse` environment
+- optionally convert EPUB endnotes/backlinks into real LaTeX footnotes to reduce `hyperref` churn
 
 ---
 
 ## Requirements
 
-### Pandoc
-- Pandoc **3.x** with Lua enabled.
-- Verify with:
+### Required
+- **Pandoc** (recommended: 3.x).  
+  Verify installation:
+  ```bash
+  pandoc --version
+  ```
+  In the output, note **User data directory** (that’s where Pandoc will look for defaults/templates/filters).
 
-```bat
-pandoc --version
-```
+### For PDF output (optional but common)
+- A TeX distribution with **XeLaTeX**:
+  - Windows: MiKTeX or TeX Live
+  - macOS: MacTeX
+  - Linux: TeX Live
 
-You should see something like:
-- `Features: +lua`
-- A `User data directory: ...` line
-
-### LaTeX (for compiling the `.tex`)
-If you plan to compile to PDF, you’ll need:
-- A TeX distribution: **MiKTeX** or **TeX Live**
-- `memoir` class installed (it’s common and usually included)
-- XeLaTeX recommended (this setup is XeLaTeX-friendly)
-
-> Note: This setup focuses on producing clean **.tex**. Compiling to PDF is optional.
+### Nice-to-have
+- `latexmk` (makes compiling stable and repeatable)
 
 ---
 
-## Installation (Windows)
+## Installation
 
-Pandoc has a “user data directory” where it finds defaults/templates/filters automatically.
+### Step 1 — Find Pandoc’s user data directory
 
-Check yours:
+Run:
 
-```bat
+```bash
 pandoc --version
 ```
 
-Example:
+Look for a line like:
+
+- Windows: `User data directory: C:\Users\<YOU>\AppData\Roaming\pandoc`
+- Linux: `~/.local/share/pandoc`
+- macOS often: `~/Library/Application Support/pandoc`  
+  (Pandoc prints the authoritative path—trust that output.)
+
+### Step 2 — Create the standard subfolders
+
+Inside the user data directory, create:
 
 ```
-User data directory: C:\Users\{YOUR_USERNAME_HERE}\AppData\Roaming\pandoc
+pandoc/
+  defaults/
+  templates/
+  filters/
 ```
 
-### Option A (Recommended): Install globally in the Pandoc user data directory
+### Step 3 — Copy the bundle files into place
 
-Create these folders if they don’t exist:
+Copy:
 
-- `%APPDATA%\pandoc\defaults\`
-- `%APPDATA%\pandoc\templates\`
-- `%APPDATA%\pandoc\filters\`
+- `novel.yaml` → `.../pandoc/defaults/novel.yaml`
+- `fiction-template.tex` → `.../pandoc/templates/fiction-template.tex`
+- `epub-fiction-fix.lua` → `.../pandoc/filters/epub-fiction-fix.lua`
 
-Copy files to:
-
-- `%APPDATA%\pandoc\defaults\novel.yaml`
-- `%APPDATA%\pandoc\templates\fiction-template.tex`
-- `%APPDATA%\pandoc\filters\epub-fiction-fix.lua`
-
-### Option B: Portable / per-project install
-
-Put all three files in your project folder (next to your EPUB), and run with an explicit defaults path, e.g.:
-
-```bat
-pandoc "Book.epub" -d ".\novel.yaml" -o "Book.tex"
-```
-
-If you use this mode, ensure `novel.yaml` references the filter using a path that resolves from your working directory (e.g., `epub-fiction-fix.lua` in the same folder).
+> Tip: You can also keep them in a project folder and call `-d path/to/novel.yaml` (see below).
 
 ---
 
-## Usage
+## Quickstart
 
-### Basic: EPUB → TeX
+Convert an EPUB to LaTeX:
 
-If installed globally as `novel.yaml` in `%APPDATA%\pandoc\defaults\`:
+```bash
+pandoc "Book.epub" -d novel -o "Book.tex"
+```
+
+That’s it. The defaults file:
+- enables a LaTeX ToC (`toc: true`)
+- sets `top-level-division: part`
+- applies the Lua filter via `filters:`
+- uses XeLaTeX if you later output directly to PDF
+
+---
+
+## Compiling the resulting LaTeX to PDF
+
+### Option A — latexmk (recommended)
+
+```bash
+latexmk -xelatex Book.tex
+```
+
+### Option B — XeLaTeX directly
+
+```bash
+xelatex Book.tex
+xelatex Book.tex
+```
+
+Two passes are often needed for ToC/bookmarks.
+
+---
+
+## Usage patterns
+
+### 1) Keep everything self-contained in a project folder
+
+If you don’t want to install into Pandoc’s user data directory, you can run with an explicit defaults file:
+
+```bash
+pandoc "Book.epub" -d "./novel.yaml" -o "Book.tex"
+```
+
+Make sure `novel.yaml`, `fiction-template.tex`, and `epub-fiction-fix.lua` are in the same folder *or* adjust paths inside `novel.yaml`.
+
+### 2) Override a metadata knob on the CLI
+
+Example: turn on debug logging:
+
+```bash
+pandoc "Book.epub" -d novel --metadata debug_fiction_filter=true -o "Book.tex"
+```
+
+Example: disable frontmatter pruning for a picky EPUB:
+
+```bash
+pandoc "Book.epub" -d novel --metadata drop_frontmatter_marketing=false -o "Book.tex"
+```
+
+### 3) Capture debug output to a log file (Windows friendly)
+
+The debug mode prints to **stderr**. Capture it:
 
 ```bat
-pandoc "Input_File.epub" -d novel -o "Output.tex"
+pandoc "Book.epub" -d novel -o "Book.tex" 2> debug.log
 ```
-
-(You can also use `-d novel.yaml`; both commonly work, depending on Pandoc version/config.)
-
-### Output folder with extracted media
-
-`novel.yaml` uses:
-
-```yaml
-extract-media: ./images
-```
-
-So you’ll typically get:
-
-```
-Output.tex
-images/...
-```
-
-### Compile the TeX (optional)
-
-From the same folder:
-
-```bat
-xelatex "Output.tex"
-xelatex "Output.tex"
-```
-
-(Run twice for ToC/hyperlinks to settle.)
 
 ---
 
 ## Configuration knobs
 
-### Table of Contents depth (`tocdepth`)
-The template supports a metadata variable `tocdepth` that maps to LaTeX’s `\setcounter{tocdepth}{...}`.
+All knobs live under `metadata:` in `novel.yaml`. You can edit the file or override per-run using `--metadata key=value`.
 
-Common values:
+### Core structure / robustness
 
-- `-1` → parts only
-- `0`  → parts + chapters (recommended for novels)
-- `1`  → include sections
-- `2`  → include subsections
+- `header_h1_role: auto`  
+  Values: `auto | part | chapter`  
+  - `auto` tries to infer whether EPUB `H1` should behave like `\part` (novel) or `\chapter` (anthology/story-title style).
+  - Use `part` or `chapter` only when an EPUB confuses the heuristic.
 
-#### Set it permanently in `novel.yaml`
-Uncomment/edit:
+- `allow_all_caps_chapters: false`  
+  If `true`, some ALL-CAPS headings can become chapters (useful for some books).  
+  If `false`, the filter is stricter to avoid “DNA string” / marketing false positives.
 
-```yaml
-# metadata:
-#   tocdepth: 0
-```
+- `promote_pov_sections: true`  
+  Converts POV markers like `HENRY—` into `\section{HENRY}` **only when already inside a chapter**.
 
-Becomes:
+### Endnotes → footnotes (stability)
 
-```yaml
-metadata:
-  tocdepth: 0
-```
+- `convert_endnotes: true`  
+  Converts EPUB endnote hyperlink systems into real Pandoc Notes → LaTeX `\footnote{...}`, and drops the endnotes section when possible.
 
-#### Or override on the command line
-(Does not require editing `novel.yaml`.)
+This is strongly recommended for EPUBs that otherwise produce many `hyperref` warnings/undefined references.
 
-```bat
-pandoc "Book.epub" -d novel -M tocdepth=1 -o "Book.tex"
+### Marketing / boilerplate pruning
+
+These exist because many EPUBs include front/back matter that you *don’t* want in a “ready-to-typeset novel” output.
+
+- `drop_marketing: true`  
+  Stops output when marketing pages begin **after backmatter has started**.
+
+- `drop_frontmatter_marketing: true`  
+  Tries to remove frontmatter marketing/other-books pages.
+
+- `drop_copyright_blocks: true`  
+  Tries to remove copyright/ISBN boilerplate blocks.
+
+- `drop_other_books_lists: true`  
+  Tries to remove “Also by… / Other books…” lists/pages.
+
+- `drop_about_author: true`  
+  Tries to remove “About the Author” frontmatter blocks.
+
+> These are intentionally conservative. If you see legitimate content removed, turn the relevant knob off for that book.
+
+### Anthology-specific
+
+- `author_line_allows_by_prefix: false`  
+  If `true`, author bylines like `by Gene Wolfe` are treated as author headings (and the `by` is stripped).
+
+### Debugging / transparency
+
+- `debug_fiction_filter: false`  
+  If `true`, the Lua filter logs key decisions to stderr, e.g.:
+  - inferred header role
+  - when it inserts `\mainmatter` / `\backmatter`
+  - when it drops detected in-book ToC/nav blocks
+  - when it prunes marketing/boilerplate
+  - when it promotes a block to a part/chapter/section
+
+---
+
+## Template notes (Memoir)
+
+`fiction-template.tex` is memoir-based and aims to be stable and XeLaTeX-friendly.
+
+Notable bits:
+- provides `\scenebreak` (so the filter can safely emit it)
+- defines `tabletcurse` for inscriptions
+- uses `hyperref` + `bookmark`
+- includes some conservative line-breaking settings (`\emergencystretch` etc.)
+
+### Choosing a font
+You can pass a font via Pandoc variables:
+
+```bash
+pandoc "Book.epub" -d novel -V mainfont="EB Garamond" -o "Book.tex"
 ```
 
 ---
 
-## What “formatted like this” means (compatibility)
-
-This setup works best when the EPUB has patterns like:
-
-- Book titles as a short standalone line, often followed by a horizontal rule
-- Chapters as lines like `1. TITLE` or `CHAPTER IV: TITLE`
-- Subsections as numeric+caps lines like `1 FLUTIC`
-- In-book ToCs represented as nested link lists (Pandoc turns them into `\hyperref` lists)
-
-If an EPUB uses *real* HTML headings (`<h1>`, `<h2>`) consistently, Pandoc may already do a good job—this filter should still help with ToC removal and cleanup, but you might not need as much inference.
-
----
-
-## Troubleshooting
+## Common troubleshooting
 
 ### “Aeson exception: Unknown option lua-filter”
-Defaults files use:
+Pandoc defaults files do **not** support `lua-filter:`. This pipeline uses:
 
 ```yaml
 filters:
   - epub-fiction-fix.lua
 ```
 
-Not `lua-filter:`.
+### Duplicate ToC / “Contents” pages show up in output
+This is typically the EPUB’s internal nav/ToC content being converted. The Lua filter strips many common patterns; if one slips through, enable debug and inspect where it happens:
 
-### Pandoc can’t find the Lua filter
-Quick test (absolute path):
-
-```bat
-pandoc "Book.epub" --lua-filter "%APPDATA%\pandoc\filters\epub-fiction-fix.lua" -o test.tex
+```bash
+pandoc "Book.epub" -d novel --metadata debug_fiction_filter=true -o "Book.tex" 2> debug.log
 ```
 
-If that works but `-d novel` doesn’t, the filter path in `novel.yaml` is wrong (or you placed the filter outside the user data directory).
+### Lots of undefined references / hyperref warnings (endnotes)
+Turn on:
 
-### The output still contains a big hyperlink ToC list in the body
-That’s almost always the EPUB’s internal nav page. The filter removes common patterns, but some publishers format nav pages differently.
+```yaml
+convert_endnotes: true
+```
 
-Fix: share a short excerpt (20–60 lines) of the “linky list” section; it’s usually a small pattern tweak.
+(or `--metadata convert_endnotes=true`)
 
-### Chapters/parts are wrong
-EPUBs vary wildly. If a “Book” doesn’t become a `\part`, or a chapter isn’t detected, it typically means the EPUB uses a different pattern.
-
-Fix: share a snippet around where it should have been detected (before/after the heading). The Lua filter is designed to be extended with extra patterns.
-
-### You want images kept
-The Lua filter currently drops images by walking blocks and removing `Image` elements. If you want images:
-- Remove (or comment out) the `Image = function(_) return {} end` part in the Lua filter.
+### Weird chapters like single punctuation / ornament-only headings
+Try:
+- keep `allow_all_caps_chapters: false`
+- enable debug logging to see what text was promoted
 
 ---
 
-## Customizing your “house style”
+## Development / extending the heuristics
 
-Most of your visual preferences live in `fiction-template.tex`:
-- margins
-- fonts
-- chapter/part styling
-- environments like `tabletcurse` / `objecttext`
-- spacing rules
+If you want to iterate quickly on filter rules:
 
-Most of the “EPUB cleanup” logic lives in `epub-fiction-fix.lua`:
-- what counts as a `\part` / `\chapter` / `\section`
-- what gets removed (in-book ToCs, ornament text)
-- how inscriptions or scene breaks are handled
-
-`novel.yaml` should stay relatively small; it’s just the glue.
+1. Generate LaTeX normally.
+2. If structure is wrong, re-run with debug enabled and capture stderr.
+3. Adjust pattern matchers in the Lua file (most rules are intentionally “opt-in” via metadata knobs).
+4. Keep a small regression set of EPUBs that represent different “families” (novels, anthologies, Calibre exports, etc.).
 
 ---
 
-## Suggested workflow
+## License / usage
 
-1) Run Pandoc to produce `.tex`
-2) Skim:
-   - ToC looks right?
-   - Parts/Chapters correct?
-   - Scene breaks / inscriptions reasonable?
-3) If the structure is wrong, tweak the Lua filter (usually small).
-4) If the look is wrong, tweak the template.
+This is a personal pipeline bundle intended for EPUB→LaTeX conversion workflows. If you publish it publicly, include attribution and make sure your input texts are legally licensed for conversion/use.
 
----
-
-## License / notes
-This is a personal conversion pipeline. Feel free to modify the files for your library of EPUBs—there’s no single “one size fits all” for EPUB structure.
